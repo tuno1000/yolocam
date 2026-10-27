@@ -22,3 +22,4 @@
 
 - カメラは HTTPS でのみ動きます（`file://` で直接開くと不可）。PC でローカル確認するなら `python -m http.server` で `http://localhost:8000` を開く。
 - YOLOv8n モデルは Ultralytics の AGPL-3.0 ライセンスです。
+- 
