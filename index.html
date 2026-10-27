@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>YOLO カメラ検出</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=M+PLUS+1p:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-column camera tool — status bar, viewfinder stage, control row, detection tally */
+:root {
+  --bg: #eef1ef;
+  --panel: #ffffff;
+  --ink: #17201c;
+  --muted: #5d6b65;
+  --line: #d3dbd7;
+  --accent: #0f8a5f;
+  --accent-ink: #ffffff;
+  --stage: #121815;
+  --warn: #b45309;
+  --font-body: "M PLUS 1p", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1210; --panel: #161d1a; --ink: #e4ebe7; --muted: #93a39c;
+    --line: #2a3530; --accent: #34c48d; --accent-ink: #06130d; --stage: #050807; --warn: #f0a046;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1210; --panel: #161d1a; --ink: #e4ebe7; --muted: #93a39c;
+  --line: #2a3530; --accent: #34c48d; --accent-ink: #06130d; --stage: #050807; --warn: #f0a046;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--ink); }
+body {
+  margin: 0;
+  font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 32px;
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.02em; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+.chip {
+  font-family: var(--font-mono); font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--panel);
+  display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums;
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.chip.ok::before { background: var(--accent); }
+.chip.busy::before { background: var(--warn); }
+.stage {
+  position: relative; background: var(--stage); border-radius: 10px; overflow: hidden;
+  aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center;
+}
+.stage canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+.stage video { display: none; }
+.empty {
+  position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center;
+  color: #c9d6d0; padding: 24px; font-size: 14px;
+}
+.empty b { color: #ffffff; font-size: 16px; }
+.reticle { position: absolute; inset: 14%; border: 1px dashed rgba(255,255,255,0.18); border-radius: 6px; pointer-events: none; }
+.controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+button, .filebtn {
+  font: inherit; font-weight: 500; font-size: 14px; border-radius: 8px; padding: 12px 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
+  text-align: center; min-width: 0;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.filebtn { position: relative; display: block; }
+.tune { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+.tune input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.tune output { font-family: var(--font-mono); color: var(--ink); width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.tally { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tally h2 { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 6px; font-weight: 500; }
+.tally ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.tally li {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 6px;
+  background: var(--bg); font-size: 14px;
+}
+.tally li i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; align-self: center; }
+.tally li span { font-family: var(--font-mono); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tally .none { color: var(--muted); font-size: 13px; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.err { color: var(--warn); }
+@media (max-width: 420px) { .controls { grid-template-columns: 1fr 1fr; } .controls .live { grid-column: 1 / -1; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <h1>YOLO カメラ検出<small>v8n · COCO 80</small></h1>
+    <span id="status" class="chip busy">モデル読込中</span>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="view" width="640" height="480" aria-label="検出結果"></canvas>
+    <video id="video" playsinline muted></video>
+    <div class="reticle" aria-hidden="true"></div>
+    <div class="empty" id="empty">
+      <b>カメラで撮るか、画像を選んでください</b>
+      <span>人・車・犬・コップなど 80 種類を枠で囲みます。<br>処理はすべて端末内で行い、画像は送信しません。</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="liveBtn" class="live primary" type="button" disabled>ライブ検出</button>
+    <label class="filebtn" id="snapLbl">写真を撮る
+      <input id="snapInput" type="file" accept="image/*" capture="environment">
+    </label>
+    <label class="filebtn">画像を選ぶ
+      <input id="pickInput" type="file" accept="image/*">
+    </label>
+  </div>
+
+  <div class="tune">
+    <label for="conf">信頼度しきい値</label>
+    <input id="conf" type="range" min="0.1" max="0.9" step="0.05" value="0.35">
+    <output id="confOut" for="conf">0.35</output>
+  </div>
+
+  <section class="tally" aria-live="polite">
+    <h2>検出結果</h2>
+    <ul id="tally"><li class="none">まだ画像がありません</li></ul>
+  </section>
+
+  <p class="note" id="note">モデル約 13MB を初回に読み込みます。</p>
+</div>
+
+<script src="ort.wasm.min.js"></script>
+<script>
+(function () {
+  const NAMES = ["人","自転車","車","バイク","飛行機","バス","電車","トラック","ボート","信号機","消火栓","停止標識","パーキングメーター","ベンチ","鳥","猫","犬","馬","羊","牛","象","熊","シマウマ","キリン","リュック","傘","ハンドバッグ","ネクタイ","スーツケース","フリスビー","スキー板","スノーボード","ボール","凧","バット","グローブ","スケボー","サーフボード","テニスラケット","ボトル","ワイングラス","カップ","フォーク","ナイフ","スプーン","器","バナナ","りんご","サンドイッチ","オレンジ","ブロッコリー","にんじん","ホットドッグ","ピザ","ドーナツ","ケーキ","椅子","ソファ","鉢植え","ベッド","テーブル","トイレ","テレビ","ノートPC","マウス","リモコン","キーボード","スマホ","電子レンジ","オーブン","トースター","シンク","冷蔵庫","本","時計","花瓶","はさみ","ぬいぐるみ","ドライヤー","歯ブラシ"];
+  const SIZE = 640, IOU = 0.45;
+  const $ = (id) => document.getElementById(id);
+  const view = $("view"), ctx = view.getContext("2d");
+  const video = $("video"), statusEl = $("status"), note = $("note");
+  const work = document.createElement("canvas"); work.width = SIZE; work.height = SIZE;
+  const wctx = work.getContext("2d", { willReadFrequently: true });
+  let session = null, lastSource = null, live = false, stream = null, busy = false;
+  let conf = 0.35;
+
+  const color = (c) => `hsl(${(c * 47) % 360} 85% 55%)`;
+  function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = "chip " + (cls || ""); }
+
+  async function loadModel() {
+    try {
+      if (typeof ort === "undefined") throw new Error("推論エンジンを読み込めませんでした");
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.wasmPaths = new URL("./", location.href).href;
+      const resp = await fetch("yolov8n.onnx");
+      if (!resp.ok) throw new Error("モデルファイル取得失敗 (" + resp.status + ")");
+      const buf = new Uint8Array(await resp.arrayBuffer());
+      session = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+      setStatus("準備OK", "ok");
+      $("liveBtn").disabled = false;
+      note.textContent = "「ライブ検出」でカメラ映像をリアルタイムに解析します。";
+    } catch (e) {
+      setStatus("読込失敗", "busy");
+      note.innerHTML = '<span class="err">モデルを読み込めませんでした: ' + (e && e.message ? e.message : e) + "</span>";
+    }
+  }
+
+  // Letterbox source into 640x640, return tensor + mapping
+  function preprocess(src, sw, sh) {
+    const r = Math.min(SIZE / sw, SIZE / sh);
+    const nw = Math.round(sw * r), nh = Math.round(sh * r);
+    const dx = (SIZE - nw) / 2, dy = (SIZE - nh) / 2;
+    wctx.fillStyle = "rgb(114,114,114)"; wctx.fillRect(0, 0, SIZE, SIZE);
+    wctx.drawImage(src, 0, 0, sw, sh, dx, dy, nw, nh);
+    const px = wctx.getImageData(0, 0, SIZE, SIZE).data;
+    const area = SIZE * SIZE, f = new Float32Array(3 * area);
+    for (let i = 0, p = 0; i < area; i++, p += 4) {
+      f[i] = px[p] / 255; f[i + area] = px[p + 1] / 255; f[i + 2 * area] = px[p + 2] / 255;
+    }
+    return { tensor: new ort.Tensor("float32", f, [1, 3, SIZE, SIZE]), r, dx, dy };
+  }
+
+  function iou(a, b) {
+    const x1 = Math.max(a.x1, b.x1), y1 = Math.max(a.y1, b.y1);
+    const x2 = Math.min(a.x2, b.x2), y2 = Math.min(a.y2, b.y2);
+    const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+    return inter / ((a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter + 1e-6);
+  }
+
+  function postprocess(out, m, sw, sh) {
+    const d = out.data, n = out.dims[2], nc = out.dims[1] - 4;
+    const cands = [];
+    for (let i = 0; i < n; i++) {
+      let best = 0, cls = -1;
+      for (let c = 0; c < nc; c++) { const s = d[(4 + c) * n + i]; if (s > best) { best = s; cls = c; } }
+      if (best < conf) continue;
+      const cx = d[i], cy = d[n + i], w = d[2 * n + i], h = d[3 * n + i];
+      const x1 = Math.max(0, (cx - w / 2 - m.dx) / m.r), y1 = Math.max(0, (cy - h / 2 - m.dy) / m.r);
+      const x2 = Math.min(sw, (cx + w / 2 - m.dx) / m.r), y2 = Math.min(sh, (cy + h / 2 - m.dy) / m.r);
+      cands.push({ x1, y1, x2, y2, score: best, cls });
+    }
+    cands.sort((a, b) => b.score - a.score);
+    const keep = [];
+    for (const c of cands) {
+      if (keep.every((k) => k.cls !== c.cls || iou(k, c) < IOU)) keep.push(c);
+      if (keep.length >= 100) break;
+    }
+    return keep;
+  }
+
+  function draw(src, sw, sh, dets) {
+    view.width = sw; view.height = sh;
+    ctx.drawImage(src, 0, 0, sw, sh);
+    const lw = Math.max(2, Math.round(Math.min(sw, sh) / 220));
+    const fs = Math.max(13, Math.round(Math.min(sw, sh) / 32));
+    ctx.font = `600 ${fs}px "M PLUS 1p", system-ui, sans-serif`;
+    ctx.textBaseline = "top";
+    for (const d of dets) {
+      const col = color(d.cls);
+      ctx.strokeStyle = col; ctx.lineWidth = lw;
+      ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+      const label = `${NAMES[d.cls]} ${(d.score * 100).toFixed(0)}%`;
+      const tw = ctx.measureText(label).width + fs * 0.6, th = fs * 1.35;
+      const ty = d.y1 - th < 0 ? d.y1 : d.y1 - th;
+      ctx.fillStyle = col; ctx.fillRect(d.x1 - lw / 2, ty, tw, th);
+      ctx.fillStyle = "#0b0f0d"; ctx.fillText(label, d.x1 + fs * 0.3, ty + fs * 0.15);
+    }
+  }
+
+  function renderTally(dets) {
+    const ul = $("tally"); ul.textContent = "";
+    if (!dets.length) { const li = document.createElement("li"); li.className = "none"; li.textContent = "しきい値以上の物体は見つかりませんでした"; ul.appendChild(li); return; }
+    const counts = new Map();
+    for (const d of dets) counts.set(d.cls, (counts.get(d.cls) || 0) + 1);
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).forEach(([cls, cnt]) => {
+      const li = document.createElement("li");
+      const sw = document.createElement("i"); sw.style.background = color(cls);
+      const name = document.createTextNode(NAMES[cls]);
+      const n = document.createElement("span"); n.textContent = "×" + cnt;
+      li.append(sw, name, n); ul.appendChild(li);
+    });
+  }
+
+  async function detect(src, sw, sh) {
+    if (!session || busy) return;
+    busy = true;
+    try {
+      const t0 = performance.now();
+      const m = preprocess(src, sw, sh);
+      const res = await session.run({ [session.inputNames[0]]: m.tensor });
+      const dets = postprocess(res[session.outputNames[0]], m, sw, sh);
+      const ms = Math.round(performance.now() - t0);
+      draw(src, sw, sh, dets);
+      renderTally(dets);
+      setStatus(`${dets.length} 件 · ${ms} ms`, "ok");
+      $("empty").hidden = true;
+    } catch (e) {
+      setStatus("推論エラー", "busy");
+      note.innerHTML = '<span class="err">推論に失敗しました: ' + (e && e.message ? e.message : e) + "</span>";
+    } finally { busy = false; }
+  }
+
+  function loadFile(file) {
+    if (!file) return;
+    stopLive();
+    const img = new Image();
+    img.onload = () => {
+      // Downscale very large phone photos for speed / memory
+      const max = 1600, s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      lastSource = c; URL.revokeObjectURL(img.src);
+      if (!session) { draw(c, c.width, c.height, []); $("empty").hidden = true; setStatus("モデル読込待ち", "busy"); return; }
+      setStatus("解析中…", "busy");
+      detect(c, c.width, c.height);
+    };
+    img.onerror = () => { note.innerHTML = '<span class="err">この画像は開けませんでした。JPEG か PNG を選んでください。</span>'; };
+    img.src = URL.createObjectURL(file);
+  }
+
+  async function startLive() {
+    if (live) { stopLive(); return; }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    } catch (e) {
+      note.innerHTML = '<span class="err">カメラを開けませんでした。HTTPS で開いているか、ブラウザの設定でカメラを許可しているか確認してください。</span>';
+            return;
+    }
+    video.srcObject = stream; await video.play();
+    live = true; $("liveBtn").textContent = "停止"; $("empty").hidden = true;
+    const loop = async () => {
+      if (!live) return;
+      if (video.videoWidth) await detect(video, video.videoWidth, video.videoHeight);
+      requestAnimationFrame(loop);
+    };
+    loop();
+  }
+  function stopLive() {
+    live = false;
+    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+    if ($("liveBtn").textContent === "停止") $("liveBtn").textContent = "ライブ検出";
+  }
+
+  $("liveBtn").addEventListener("click", startLive);
+  $("snapInput").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
+  $("pickInput").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
+  $("conf").addEventListener("input", (e) => {
+    conf = parseFloat(e.target.value); $("confOut").textContent = conf.toFixed(2);
+    if (!live && lastSource) detect(lastSource, lastSource.width, lastSource.height);
+  });
+
+  loadModel();
+})();
+</script>
+
+</body>
+</html>
