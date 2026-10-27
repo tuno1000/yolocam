@@ -152,6 +152,9 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
   let conf = 0.35;
 
   const color = (c) => `hsl(${(c * 47) % 360} 85% 55%)`;
+  const reticle = document.querySelector(".reticle");
+  function quiet() { $("empty").hidden = true; reticle.hidden = true; note.hidden = true; }
+  function showErr(html) { note.innerHTML = html; note.hidden = false; }
   function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = "chip " + (cls || ""); }
 
   async function loadModel() {
@@ -168,7 +171,7 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
       note.textContent = "「ライブ検出」でカメラ映像をリアルタイムに解析します。";
     } catch (e) {
       setStatus("読込失敗", "busy");
-      note.innerHTML = '<span class="err">モデルを読み込めませんでした: ' + (e && e.message ? e.message : e) + "</span>";
+      showErr('<span class="err">モデルを読み込めませんでした: ' + (e && e.message ? e.message : e) + "</span>");
     }
   }
 
@@ -260,10 +263,10 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
       draw(src, sw, sh, dets);
       renderTally(dets);
       setStatus(`${dets.length} 件 · ${ms} ms`, "ok");
-      $("empty").hidden = true;
+      quiet();
     } catch (e) {
       setStatus("推論エラー", "busy");
-      note.innerHTML = '<span class="err">推論に失敗しました: ' + (e && e.message ? e.message : e) + "</span>";
+      showErr('<span class="err">推論に失敗しました: ' + (e && e.message ? e.message : e) + "</span>");
     } finally { busy = false; }
   }
 
@@ -278,11 +281,11 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
       c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       lastSource = c; URL.revokeObjectURL(img.src);
-      if (!session) { draw(c, c.width, c.height, []); $("empty").hidden = true; setStatus("モデル読込待ち", "busy"); return; }
+      if (!session) { draw(c, c.width, c.height, []); quiet(); setStatus("モデル読込待ち", "busy"); return; }
       setStatus("解析中…", "busy");
       detect(c, c.width, c.height);
     };
-    img.onerror = () => { note.innerHTML = '<span class="err">この画像は開けませんでした。JPEG か PNG を選んでください。</span>'; };
+    img.onerror = () => { showErr('<span class="err">この画像は開けませんでした。JPEG か PNG を選んでください。</span>'); };
     img.src = URL.createObjectURL(file);
   }
 
@@ -291,11 +294,11 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
     } catch (e) {
-      note.innerHTML = '<span class="err">カメラを開けませんでした。HTTPS で開いているか、ブラウザの設定でカメラを許可しているか確認してください。</span>';
+      showErr('<span class="err">カメラを開けませんでした。HTTPS で開いているか、ブラウザの設定でカメラを許可しているか確認してください。</span>');
             return;
     }
     video.srcObject = stream; await video.play();
-    live = true; $("liveBtn").textContent = "停止"; $("empty").hidden = true;
+    live = true; $("liveBtn").textContent = "停止"; quiet();
     const loop = async () => {
       if (!live) return;
       if (video.videoWidth) await detect(video, video.videoWidth, video.videoHeight);
