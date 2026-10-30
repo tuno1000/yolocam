@@ -56,9 +56,9 @@ h1 small { font-family: var(--font-mono); font-size: 12px; color: var(--muted); 
 .chip.busy::before { background: var(--warn); }
 .stage {
   position: relative; background: var(--stage); border-radius: 10px; overflow: hidden;
-  aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center;
+  aspect-ratio: 4 / 3; max-width: 100%; max-height: 72vh; margin-inline: auto; width: 100%;
 }
-.stage canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
 .stage video { display: none; }
 .empty {
   position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center;
@@ -66,6 +66,10 @@ h1 small { font-family: var(--font-mono); font-size: 12px; color: var(--muted); 
 }
 .empty b { color: #ffffff; font-size: 16px; }
 .reticle { position: absolute; inset: 14%; border: 1px dashed rgba(255,255,255,0.18); border-radius: 6px; pointer-events: none; }
+.flip {
+  position: absolute; top: 10px; right: 10px; padding: 6px 12px; font-size: 13px;
+  background: rgba(10,14,12,0.6); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); border-radius: 999px;
+}
 .controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 button, .filebtn {
   font: inherit; font-weight: 500; font-size: 14px; border-radius: 8px; padding: 12px 8px;
@@ -74,13 +78,16 @@ button, .filebtn {
 }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
-button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, .filebtn:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .filebtn { position: relative; display: block; }
-.tune { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
-.tune input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.tune { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.tune .range { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 220px; }
+.tune input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .tune output { font-family: var(--font-mono); color: var(--ink); width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
-.tally { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tune .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); cursor: pointer; }
+.tune .toggle input { accent-color: var(--accent); width: 18px; height: 18px; }
+.tally { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
 .tally h2 { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 6px; font-weight: 500; }
 .tally ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .tally li {
@@ -90,6 +97,14 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
 .tally li i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; align-self: center; }
 .tally li span { font-family: var(--font-mono); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .tally .none { color: var(--muted); font-size: 13px; }
+.power { display: grid; gap: 6px; }
+.power .row { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; padding: 8px 10px; background: var(--bg); border-radius: 6px; }
+.power .num { font-family: var(--font-mono); font-weight: 600; font-size: 18px; font-variant-numeric: tabular-nums; }
+.power .rank { font-size: 13px; color: var(--muted); }
+.power .bars { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.power .bar { font-size: 11px; color: var(--muted); display: grid; gap: 2px; min-width: 0; }
+.power .bar b { display: block; height: 4px; border-radius: 2px; background: var(--line); position: relative; overflow: hidden; }
+.power .bar b::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--v); background: var(--accent); }
 .note { font-size: 12px; color: var(--muted); margin: 0; }
 .err { color: var(--warn); }
 @media (max-width: 420px) { .controls { grid-template-columns: 1fr 1fr; } .controls .live { grid-column: 1 / -1; } }
@@ -98,10 +113,9 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
 </head>
 <body>
 
-
 <div class="wrap">
   <header>
-    <h1>YOLO カメラ検出<small>v8n · COCO 80</small></h1>
+    <h1>YOLO カメラ検出<small>v8n · COCO 80 · Pose</small></h1>
     <span id="status" class="chip busy">モデル読込中</span>
   </header>
 
@@ -111,8 +125,9 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
     <div class="reticle" aria-hidden="true"></div>
     <div class="empty" id="empty">
       <b>カメラで撮るか、画像を選んでください</b>
-      <span>人・車・犬・コップなど 80 種類を枠で囲みます。<br>処理はすべて端末内で行い、画像は送信しません。</span>
+      <span>人・車・犬・コップなど 80 種類を枠で囲みます。<br>人を見つけると、姿勢と動きから戦闘値を表示します。<br>処理はすべて端末内で行い、画像は送信しません。</span>
     </div>
+    <button id="flipBtn" class="flip" type="button" hidden>カメラ切替</button>
   </div>
 
   <div class="controls">
@@ -126,54 +141,98 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
   </div>
 
   <div class="tune">
-    <label for="conf">信頼度しきい値</label>
-    <input id="conf" type="range" min="0.1" max="0.9" step="0.05" value="0.35">
-    <output id="confOut" for="conf">0.35</output>
+    <div class="range">
+      <label for="conf">信頼度しきい値</label>
+      <input id="conf" type="range" min="0.1" max="0.9" step="0.05" value="0.35">
+      <output id="confOut" for="conf">0.35</output>
+    </div>
+    <label class="toggle" for="powerOn"><input id="powerOn" type="checkbox">戦闘値を表示</label>
   </div>
 
   <section class="tally" aria-live="polite">
-    <h2>検出結果</h2>
-    <ul id="tally"><li class="none">まだ画像がありません</li></ul>
+    <div>
+      <h2>検出結果</h2>
+      <ul id="tally"><li class="none">まだ画像がありません</li></ul>
+    </div>
+    <div id="powerBox" hidden>
+      <h2>戦闘値</h2>
+      <div class="power" id="powerList"></div>
+    </div>
   </section>
 
-  <p class="note" id="note">モデル約 13MB を初回に読み込みます。</p>
+  <p class="note" id="note">モデル約 13MB を初回に読み込みます。戦闘値はチェックを入れたときに追加で約 13MB を読み込みます。</p>
 </div>
 
 <script src="ort.wasm.min.js"></script>
 <script>
 (function () {
+  const MODEL_DET = "yolov8n.onnx";
+  const MODEL_POSE = "yolov8n-pose.onnx";
   const NAMES = ["人","自転車","車","バイク","飛行機","バス","電車","トラック","ボート","信号機","消火栓","停止標識","パーキングメーター","ベンチ","鳥","猫","犬","馬","羊","牛","象","熊","シマウマ","キリン","リュック","傘","ハンドバッグ","ネクタイ","スーツケース","フリスビー","スキー板","スノーボード","ボール","凧","バット","グローブ","スケボー","サーフボード","テニスラケット","ボトル","ワイングラス","カップ","フォーク","ナイフ","スプーン","器","バナナ","りんご","サンドイッチ","オレンジ","ブロッコリー","にんじん","ホットドッグ","ピザ","ドーナツ","ケーキ","椅子","ソファ","鉢植え","ベッド","テーブル","トイレ","テレビ","ノートPC","マウス","リモコン","キーボード","スマホ","電子レンジ","オーブン","トースター","シンク","冷蔵庫","本","時計","花瓶","はさみ","ぬいぐるみ","ドライヤー","歯ブラシ"];
-  const SIZE = 640, IOU = 0.45;
+  // COCO keypoints: 0 nose, 1-4 eyes/ears, 5/6 shoulders, 7/8 elbows, 9/10 wrists, 11/12 hips, 13/14 knees, 15/16 ankles
+  const BONES = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+  const FACTORS = [["build","体格"],["stance","構え"],["guard","ガード"],["speed","速さ"],["presence","存在感"]];
+  const WEIGHTS = { build: 0.15, stance: 0.25, guard: 0.30, speed: 0.20, presence: 0.10 };
+  const SIZE = 640, IOU = 0.45, KP_MIN = 0.4, DET_EVERY = 3;
   const $ = (id) => document.getElementById(id);
-  const view = $("view"), ctx = view.getContext("2d");
+  const view = $("view"), ctx = view.getContext("2d"), stage = $("stage");
+  let placed = []; // HUD rectangles already drawn this frame
   const video = $("video"), statusEl = $("status"), note = $("note");
   const work = document.createElement("canvas"); work.width = SIZE; work.height = SIZE;
   const wctx = work.getContext("2d", { willReadFrequently: true });
-  let session = null, lastSource = null, live = false, stream = null, busy = false;
-  let conf = 0.35;
+  const frame = document.createElement("canvas"), fctx = frame.getContext("2d");
+  let detSession = null, poseSession = null, lastSource = null, live = false, stream = null, busy = false;
+  let conf = 0.35, powerOn = false, poseLoading = null, facing = "environment", frameNo = 0, lastObjs = [];
+  let tracks = [], nextId = 1;
 
   const color = (c) => `hsl(${(c * 47) % 360} 85% 55%)`;
+  const clamp = (v) => Math.max(0, Math.min(1, v));
   const reticle = document.querySelector(".reticle");
   function quiet() { $("empty").hidden = true; reticle.hidden = true; note.hidden = true; }
   function showErr(html) { note.innerHTML = html; note.hidden = false; }
   function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = "chip " + (cls || ""); }
 
-  async function loadModel() {
+  async function makeSession(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(url + " を取得できません (" + resp.status + ")");
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    return ort.InferenceSession.create(buf, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+  }
+
+  async function loadModels() {
     try {
       if (typeof ort === "undefined") throw new Error("推論エンジンを読み込めませんでした");
       ort.env.wasm.numThreads = 1;
       ort.env.wasm.wasmPaths = new URL("./", location.href).href;
-      const resp = await fetch("yolov8n.onnx");
-      if (!resp.ok) throw new Error("モデルファイル取得失敗 (" + resp.status + ")");
-      const buf = new Uint8Array(await resp.arrayBuffer());
-      session = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
-      setStatus("準備OK", "ok");
-      $("liveBtn").disabled = false;
-      note.textContent = "「ライブ検出」でカメラ映像をリアルタイムに解析します。";
+      detSession = await makeSession(MODEL_DET);
     } catch (e) {
       setStatus("読込失敗", "busy");
       showErr('<span class="err">モデルを読み込めませんでした: ' + (e && e.message ? e.message : e) + "</span>");
+      return;
     }
+    setStatus("準備OK", "ok");
+    $("liveBtn").disabled = false;
+    if (lastSource) detect(lastSource, lastSource.width, lastSource.height);
+  }
+
+  // The pose model is only downloaded the first time 戦闘値 is switched on
+  function ensurePose() {
+    if (poseSession || poseLoading) return poseLoading;
+    const box = $("powerOn");
+    box.disabled = true;
+    setStatus("戦闘値モデル読込中", "busy");
+    poseLoading = (async () => {
+      try {
+        if (typeof ort === "undefined") throw new Error("推論エンジンがありません");
+        poseSession = await makeSession(MODEL_POSE);
+        setStatus("準備OK", "ok");
+      } catch (e) {
+        powerOn = false; box.checked = false;
+        setStatus("読込失敗", "busy");
+        showErr('<span class="err">戦闘値用のモデルを読み込めませんでした。通信状態を確認して、もう一度チェックしてください。</span>');
+      } finally { box.disabled = false; poseLoading = null; }
+    })();
+    return poseLoading;
   }
 
   // Letterbox source into 640x640, return tensor + mapping
@@ -197,73 +256,269 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
     const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
     return inter / ((a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter + 1e-6);
   }
+  function nms(cands, sameClassOnly) {
+    cands.sort((a, b) => b.score - a.score);
+    const keep = [];
+    for (const c of cands) {
+      if (keep.every((k) => (sameClassOnly && k.cls !== c.cls) || iou(k, c) < IOU)) keep.push(c);
+      if (keep.length >= 100) break;
+    }
+    return keep;
+  }
+  function unbox(cx, cy, w, h, m, sw, sh) {
+    return {
+      x1: Math.max(0, (cx - w / 2 - m.dx) / m.r), y1: Math.max(0, (cy - h / 2 - m.dy) / m.r),
+      x2: Math.min(sw, (cx + w / 2 - m.dx) / m.r), y2: Math.min(sh, (cy + h / 2 - m.dy) / m.r),
+    };
+  }
 
-  function postprocess(out, m, sw, sh) {
+  function postDet(out, m, sw, sh) {
     const d = out.data, n = out.dims[2], nc = out.dims[1] - 4;
     const cands = [];
     for (let i = 0; i < n; i++) {
       let best = 0, cls = -1;
       for (let c = 0; c < nc; c++) { const s = d[(4 + c) * n + i]; if (s > best) { best = s; cls = c; } }
       if (best < conf) continue;
-      const cx = d[i], cy = d[n + i], w = d[2 * n + i], h = d[3 * n + i];
-      const x1 = Math.max(0, (cx - w / 2 - m.dx) / m.r), y1 = Math.max(0, (cy - h / 2 - m.dy) / m.r);
-      const x2 = Math.min(sw, (cx + w / 2 - m.dx) / m.r), y2 = Math.min(sh, (cy + h / 2 - m.dy) / m.r);
-      cands.push({ x1, y1, x2, y2, score: best, cls });
+      cands.push(Object.assign(unbox(d[i], d[n + i], d[2 * n + i], d[3 * n + i], m, sw, sh), { score: best, cls }));
     }
-    cands.sort((a, b) => b.score - a.score);
-    const keep = [];
-    for (const c of cands) {
-      if (keep.every((k) => k.cls !== c.cls || iou(k, c) < IOU)) keep.push(c);
-      if (keep.length >= 100) break;
-    }
-    return keep;
+    return nms(cands, true);
   }
 
-  function draw(src, sw, sh, dets) {
+  // Pose output: [1, 56, N] = box(4) + person score(1) + 17 x (x, y, visibility)
+  function postPose(out, m, sw, sh) {
+    const d = out.data, n = out.dims[2];
+    const cands = [];
+    for (let i = 0; i < n; i++) {
+      const s = d[4 * n + i];
+      if (s < conf) continue;
+      const kp = [];
+      for (let k = 0; k < 17; k++) {
+        const base = (5 + k * 3) * n + i;
+        kp.push({ x: (d[base] - m.dx) / m.r, y: (d[base + n] - m.dy) / m.r, v: d[base + 2 * n] });
+      }
+      cands.push(Object.assign(unbox(d[i], d[n + i], d[2 * n + i], d[3 * n + i], m, sw, sh), { score: s, cls: 0, kp }));
+    }
+    return nms(cands, false);
+  }
+
+  // ---- 戦闘値: score each person from what the pose shows ----
+  const ok = (p) => p && p.v >= KP_MIN;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, v: Math.min(a.v, b.v) });
+  function angle(a, b, c) { // angle at b, degrees
+    const v1 = { x: a.x - b.x, y: a.y - b.y }, v2 = { x: c.x - b.x, y: c.y - b.y };
+    const cos = (v1.x * v2.x + v1.y * v2.y) / (Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y) + 1e-6);
+    return Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+  }
+  function bodyUnit(p) {
+    const k = p.kp;
+    if (ok(k[5]) && ok(k[6])) return Math.max(dist(k[5], k[6]), (p.y2 - p.y1) * 0.12);
+    return (p.x2 - p.x1) * 0.35;
+  }
+
+  function staticFactors(p, sh) {
+    const k = p.kp, U = bodyUnit(p);
+    const f = { build: 0.3, stance: 0, guard: 0, presence: clamp(((p.y2 - p.y1) / sh - 0.15) / 0.7) };
+    // 体格: shoulder width vs torso length
+    if (ok(k[5]) && ok(k[6]) && ok(k[11]) && ok(k[12])) {
+      const torso = dist(mid(k[5], k[6]), mid(k[11], k[12]));
+      if (torso > 1) f.build = clamp((dist(k[5], k[6]) / torso - 0.4) / 0.45);
+    }
+    // 構え: feet apart + knees bent
+    let wide = 0, bend = 0;
+    if (ok(k[15]) && ok(k[16])) wide = clamp((dist(k[15], k[16]) / U - 1.1) / 0.9);
+    const knees = [[11, 13, 15], [12, 14, 16]].filter(([h, n, a]) => ok(k[h]) && ok(k[n]) && ok(k[a]));
+    if (knees.length) bend = clamp(knees.map(([h, n, a]) => (172 - angle(k[h], k[n], k[a])) / 40).reduce((s, v) => s + v, 0) / knees.length);
+    f.stance = clamp(wide * 0.7 + bend * 0.5);
+    // ガード: fists raised in front of the chest / face, or arms raised overhead
+    if (ok(k[5]) && ok(k[6])) {
+      const sy = (k[5].y + k[6].y) / 2;
+      const hipY = ok(k[11]) && ok(k[12]) ? (k[11].y + k[12].y) / 2 : sy + U * 1.6;
+      let g = 0;
+      for (const [e, w] of [[7, 9], [8, 10]]) {
+        if (!ok(k[w])) continue;
+        const raised = k[w].y < sy + (hipY - sy) * 0.45;
+        const bentArm = ok(k[e]) && k[w].y < k[e].y;
+        if (raised && bentArm) g += 0.5; else if (raised) g += 0.3;
+      }
+      const overhead = ok(k[0]) && ok(k[9]) && ok(k[10]) && k[9].y < k[0].y && k[10].y < k[0].y;
+      f.guard = clamp(overhead ? Math.max(g, 0.8) : g);
+    }
+    return f;
+  }
+
+  const RANKS = [[100, "一般人"], [1000, "腕自慢"], [10000, "格闘家"], [100000, "達人"], [Infinity, "超人"]];
+  const rankOf = (v) => RANKS.find(([lim]) => v < lim)[1];
+  function toPower(f, hasSpeed, id) {
+    let s = 0, w = 0;
+    for (const [key] of FACTORS) {
+      if (key === "speed" && !hasSpeed) continue;
+      s += WEIGHTS[key] * f[key]; w += WEIGHTS[key];
+    }
+    s /= w;
+    const jitter = 1 + (((id * 2654435761) >>> 0) % 1000) / 1000 * 0.16 - 0.08; // stable per person ±8%
+    return Math.round(5 * Math.pow(10, s * 4.6) * jitter);
+  }
+
+  // Simple IoU tracker so each person keeps their own value and speed history
+  function updateTracks(people, sh, now, isLive) {
+    if (!isLive) { tracks = []; nextId = 1; }
+    const used = new Set();
+    const next = [];
+    for (const p of people) {
+      let best = null, bi = 0.25;
+      for (const t of tracks) { if (used.has(t)) continue; const v = iou(t, p); if (v > bi) { bi = v; best = t; } }
+      const t = best || { id: nextId++, shown: 0, burst: 0, prev: null, prevT: now, miss: 0 };
+      used.add(t);
+      const U = bodyUnit(p);
+      let speedNow = 0;
+      if (isLive && t.prev) {
+        const dt = Math.max(0.03, (now - t.prevT) / 1000);
+        for (const k of [9, 10, 15, 16]) {
+          if (ok(p.kp[k]) && ok(t.prev[k])) speedNow = Math.max(speedNow, dist(p.kp[k], t.prev[k]) / U / dt);
+        }
+        const decay = Math.exp(-dt / 0.9);
+        t.burst = Math.max(t.burst * decay, clamp(speedNow / 7));
+      }
+      const f = staticFactors(p, sh);
+      f.speed = t.burst;
+      const target = toPower(f, isLive, t.id);
+      t.shown = t.shown ? (target > t.shown ? t.shown + (target - t.shown) * 0.6 : t.shown + (target - t.shown) * 0.2) : target;
+      Object.assign(t, { x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2, kp: p.kp, prev: p.kp, prevT: now, miss: 0, f, power: Math.round(t.shown) });
+      next.push(t);
+      p.track = t;
+    }
+    for (const t of tracks) if (!used.has(t) && ++t.miss <= 4) next.push(Object.assign(t, { stale: true }));
+    tracks = next.map((t) => { if (used.has(t)) t.stale = false; return t; });
+  }
+
+  function drawBox(d, col, lw, fs, label) {
+    ctx.strokeStyle = col; ctx.lineWidth = lw;
+    ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+    const tw = ctx.measureText(label).width + fs * 0.6, th = fs * 1.35;
+    const ty = d.y1 - th < 0 ? d.y1 : d.y1 - th;
+    ctx.fillStyle = col; ctx.fillRect(d.x1 - lw / 2, ty, tw, th);
+    ctx.fillStyle = "#0b0f0d"; ctx.fillText(label, d.x1 + fs * 0.3, ty + fs * 0.15);
+  }
+
+  function drawPerson(p, lw, fs, sw) {
+    const col = "#3ef0a0";
+    const k = p.kp;
+    ctx.save();
+    ctx.strokeStyle = "rgba(62,240,160,0.85)"; ctx.lineWidth = Math.max(2, lw * 0.9); ctx.lineCap = "round";
+    for (const [a, b] of BONES) {
+      if (!ok(k[a]) || !ok(k[b])) continue;
+      ctx.beginPath(); ctx.moveTo(k[a].x, k[a].y); ctx.lineTo(k[b].x, k[b].y); ctx.stroke();
+    }
+    ctx.fillStyle = "#ffffff";
+    for (let i = 5; i < 17; i++) if (ok(k[i])) { ctx.beginPath(); ctx.arc(k[i].x, k[i].y, lw * 1.2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+    ctx.strokeStyle = "rgba(62,240,160,0.5)"; ctx.lineWidth = Math.max(1, lw / 2);
+    ctx.strokeRect(p.x1, p.y1, p.x2 - p.x1, p.y2 - p.y1);
+    if (!powerOn || !p.track) { drawBox(p, col, lw, fs, `人 ${(p.score * 100).toFixed(0)}%`); return; }
+    // HUD above the head
+    const val = p.track.power.toLocaleString("ja-JP");
+    const big = Math.round(fs * 1.5);
+    ctx.font = `600 ${big}px "IBM Plex Mono", ui-monospace, monospace`;
+    const w1 = ctx.measureText(val).width;
+    ctx.font = `600 ${fs}px "M PLUS 1p", system-ui, sans-serif`;
+    const cap = `戦闘値 · ${rankOf(p.track.power)}`;
+    const w2 = ctx.measureText(cap).width;
+    const pad = fs * 0.5, bw = Math.max(w1, w2) + pad * 2, bh = big + fs + pad * 2.2;
+    let bx = (p.x1 + p.x2) / 2 - bw / 2; bx = Math.max(4, Math.min(sw - bw - 4, bx));
+    let by = p.y1 - bh - fs * 0.4; if (by < 4) by = p.y1 + 4;
+    // keep HUDs of neighbouring people from covering each other
+    const hit = (y) => placed.some((r) => bx < r.x + r.w + 4 && r.x < bx + bw + 4 && y < r.y + r.h + 4 && r.y < y + bh + 4);
+    if (hit(by)) {
+      const step = bh + 6, tries = [];
+      for (let i = 1; i <= 4; i++) tries.push(by - step * i, by + step * i);
+      const free = tries.find((y) => y >= 4 && y + bh <= view.height - 4 && !hit(y));
+      if (free !== undefined) by = free;
+    }
+    placed.push({ x: bx, y: by, w: bw, h: bh });
+    // leader line from the label to the head, so a shifted label still points at its person
+    const head = ok(k[0]) ? k[0] : { x: (p.x1 + p.x2) / 2, y: p.y1 };
+    const lx = Math.max(bx + 6, Math.min(bx + bw - 6, head.x)), ly = head.y < by ? by : by + bh;
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, lw / 1.5);
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(head.x, head.y); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(head.x, head.y, lw * 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(6,20,14,0.78)"; ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, lw / 1.5); ctx.strokeRect(bx, by, bw, bh);
+    ctx.fillStyle = "#b9f5d8"; ctx.fillText(cap, bx + pad, by + pad);
+    ctx.font = `600 ${big}px "IBM Plex Mono", ui-monospace, monospace`;
+    ctx.fillStyle = col; ctx.fillText(val, bx + pad, by + pad + fs * 1.15);
+    ctx.font = `600 ${fs}px "M PLUS 1p", system-ui, sans-serif`;
+  }
+
+  function draw(src, sw, sh, objs, people) {
     view.width = sw; view.height = sh;
+    stage.style.aspectRatio = sw + " / " + sh;
+    placed = [];
     ctx.drawImage(src, 0, 0, sw, sh);
     const lw = Math.max(2, Math.round(Math.min(sw, sh) / 220));
     const fs = Math.max(13, Math.round(Math.min(sw, sh) / 32));
     ctx.font = `600 ${fs}px "M PLUS 1p", system-ui, sans-serif`;
     ctx.textBaseline = "top";
-    for (const d of dets) {
-      const col = color(d.cls);
-      ctx.strokeStyle = col; ctx.lineWidth = lw;
-      ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
-      const label = `${NAMES[d.cls]} ${(d.score * 100).toFixed(0)}%`;
-      const tw = ctx.measureText(label).width + fs * 0.6, th = fs * 1.35;
-      const ty = d.y1 - th < 0 ? d.y1 : d.y1 - th;
-      ctx.fillStyle = col; ctx.fillRect(d.x1 - lw / 2, ty, tw, th);
-      ctx.fillStyle = "#0b0f0d"; ctx.fillText(label, d.x1 + fs * 0.3, ty + fs * 0.15);
+    for (const d of objs) drawBox(d, color(d.cls), lw, fs, `${NAMES[d.cls]} ${(d.score * 100).toFixed(0)}%`);
+    [...people].sort((a, b) => (b.track ? b.track.power : 0) - (a.track ? a.track.power : 0)).forEach((p) => drawPerson(p, lw, fs, sw));
+  }
+
+  function renderTally(objs, people) {
+    const ul = $("tally"); ul.textContent = "";
+    const all = people.concat(objs);
+    if (!all.length) { const li = document.createElement("li"); li.className = "none"; li.textContent = "しきい値以上の物体は見つかりませんでした"; ul.appendChild(li); }
+    const counts = new Map();
+    for (const d of all) counts.set(d.cls, (counts.get(d.cls) || 0) + 1);
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).forEach(([cls, cnt]) => {
+      const li = document.createElement("li");
+      const sw = document.createElement("i"); sw.style.background = cls === 0 && people.length ? "#3ef0a0" : color(cls);
+      const n = document.createElement("span"); n.textContent = "×" + cnt;
+      li.append(sw, document.createTextNode(NAMES[cls]), n); ul.appendChild(li);
+    });
+    // per-person breakdown
+    const box = $("powerBox"), list = $("powerList");
+    const ranked = people.filter((p) => p.track).sort((a, b) => b.track.power - a.track.power);
+    box.hidden = !powerOn || !ranked.length;
+    list.textContent = "";
+    for (const p of ranked) {
+      const t = p.track, row = document.createElement("div"); row.className = "row";
+      const num = document.createElement("span"); num.className = "num"; num.textContent = t.power.toLocaleString("ja-JP");
+      const rk = document.createElement("span"); rk.className = "rank"; rk.textContent = rankOf(t.power);
+      const bars = document.createElement("div"); bars.className = "bars";
+      for (const [key, label] of FACTORS) {
+        if (key === "speed" && !live) continue;
+        const b = document.createElement("span"); b.className = "bar";
+        const fill = document.createElement("b"); fill.style.setProperty("--v", Math.round(t.f[key] * 100) + "%");
+        b.append(document.createTextNode(label), fill); bars.appendChild(b);
+      }
+      row.append(num, rk, bars); list.appendChild(row);
     }
   }
 
-  function renderTally(dets) {
-    const ul = $("tally"); ul.textContent = "";
-    if (!dets.length) { const li = document.createElement("li"); li.className = "none"; li.textContent = "しきい値以上の物体は見つかりませんでした"; ul.appendChild(li); return; }
-    const counts = new Map();
-    for (const d of dets) counts.set(d.cls, (counts.get(d.cls) || 0) + 1);
-    [...counts.entries()].sort((a, b) => b[1] - a[1]).forEach(([cls, cnt]) => {
-      const li = document.createElement("li");
-      const sw = document.createElement("i"); sw.style.background = color(cls);
-      const name = document.createTextNode(NAMES[cls]);
-      const n = document.createElement("span"); n.textContent = "×" + cnt;
-      li.append(sw, name, n); ul.appendChild(li);
-    });
-  }
-
   async function detect(src, sw, sh) {
-    if (!session || busy) return;
+    if (!detSession || busy) return;
     busy = true;
     try {
       const t0 = performance.now();
       const m = preprocess(src, sw, sh);
-      const res = await session.run({ [session.inputNames[0]]: m.tensor });
-      const dets = postprocess(res[session.outputNames[0]], m, sw, sh);
+      const usePose = powerOn && !!poseSession;
+      let objs = lastObjs, people = [];
+      if (!live || frameNo % DET_EVERY === 0 || !usePose) {
+        const res = await detSession.run({ [detSession.inputNames[0]]: m.tensor });
+        objs = postDet(res[detSession.outputNames[0]], m, sw, sh);
+        if (usePose) objs = objs.filter((d) => d.cls !== 0);
+        lastObjs = objs;
+      }
+      if (usePose) {
+        const res = await poseSession.run({ [poseSession.inputNames[0]]: m.tensor });
+        people = postPose(res[poseSession.outputNames[0]], m, sw, sh);
+        updateTracks(people, sh, performance.now(), live);
+      }
+      frameNo++;
       const ms = Math.round(performance.now() - t0);
-      draw(src, sw, sh, dets);
-      renderTally(dets);
-      setStatus(`${dets.length} 件 · ${ms} ms`, "ok");
+      draw(src, sw, sh, objs, people);
+      renderTally(objs, people);
+      setStatus(poseLoading ? "戦闘値モデル読込中" : `${objs.length + people.length} 件 · ${ms} ms`, poseLoading ? "busy" : "ok");
       quiet();
     } catch (e) {
       setStatus("推論エラー", "busy");
@@ -282,7 +537,7 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
       c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       lastSource = c; URL.revokeObjectURL(img.src);
-      if (!session) { draw(c, c.width, c.height, []); quiet(); setStatus("モデル読込待ち", "busy"); return; }
+      if (!detSession) { draw(c, c.width, c.height, [], []); quiet(); setStatus("モデル読込待ち", "busy"); return; }
       setStatus("解析中…", "busy");
       detect(c, c.width, c.height);
     };
@@ -290,19 +545,33 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
     img.src = URL.createObjectURL(file);
   }
 
+  async function openCamera() {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    video.srcObject = stream; await video.play();
+  }
+
   async function startLive() {
     if (live) { stopLive(); return; }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-    } catch (e) {
+    try { await openCamera(); }
+    catch (e) {
       showErr('<span class="err">カメラを開けませんでした。HTTPS で開いているか、ブラウザの設定でカメラを許可しているか確認してください。</span>');
-            return;
+      return;
     }
-    video.srcObject = stream; await video.play();
-    live = true; $("liveBtn").textContent = "停止"; quiet();
+    live = true; tracks = []; frameNo = 0; lastObjs = [];
+    $("liveBtn").textContent = "停止"; $("flipBtn").hidden = false; quiet();
     const loop = async () => {
       if (!live) return;
-      if (video.videoWidth) await detect(video, video.videoWidth, video.videoHeight);
+      if (video.videoWidth) {
+        // copy the frame (mirrored for the front camera) so drawing and detection share one image
+        const s = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+        frame.width = Math.round(video.videoWidth * s); frame.height = Math.round(video.videoHeight * s);
+        fctx.save();
+        if (facing === "user") { fctx.translate(frame.width, 0); fctx.scale(-1, 1); }
+        fctx.drawImage(video, 0, 0, frame.width, frame.height);
+        fctx.restore();
+        await detect(frame, frame.width, frame.height);
+      }
       requestAnimationFrame(loop);
     };
     loop();
@@ -310,18 +579,30 @@ button:focus-visible, .filebtn:focus-within, input[type=range]:focus-visible { o
   function stopLive() {
     live = false;
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+    $("flipBtn").hidden = true;
     if ($("liveBtn").textContent === "停止") $("liveBtn").textContent = "ライブ検出";
   }
 
   $("liveBtn").addEventListener("click", startLive);
+  $("flipBtn").addEventListener("click", async () => {
+    facing = facing === "environment" ? "user" : "environment";
+    tracks = [];
+    try { await openCamera(); } catch (e) { facing = facing === "user" ? "environment" : "user"; showErr('<span class="err">もう一方のカメラを開けませんでした。</span>'); }
+  });
   $("snapInput").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
   $("pickInput").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
   $("conf").addEventListener("input", (e) => {
     conf = parseFloat(e.target.value); $("confOut").textContent = conf.toFixed(2);
     if (!live && lastSource) detect(lastSource, lastSource.width, lastSource.height);
   });
+  $("powerOn").addEventListener("change", async (e) => {
+    powerOn = e.target.checked;
+    tracks = []; lastObjs = []; frameNo = 0;
+    if (powerOn && !poseSession) await ensurePose();
+    if (!live && lastSource) detect(lastSource, lastSource.width, lastSource.height);
+  });
 
-  loadModel();
+  loadModels();
 })();
 </script>
 
